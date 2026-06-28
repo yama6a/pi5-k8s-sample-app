@@ -11,14 +11,24 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
-  packages: write # required, or the push fails with permission_denied
+  contents: write # required to create the GitHub release
+  packages: write # required, or the image push fails with permission_denied
 
 jobs:
   build-push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine next version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // "0"')
+          next=$((latest + 1))
+          echo "Latest release: ${latest:-<none>} -> next: $next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -35,9 +45,18 @@ jobs:
         with:
           context: .
           file: .build/Dockerfile # the Dockerfile isn't at the repo root
+          platforms: linux/arm64 # arm64 only
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Only tag a release once the image has actually been pushed.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --target "${{ github.sha }}" \
+            --title "${{ steps.version.outputs.version }}" \
+            --notes "Image: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}"
