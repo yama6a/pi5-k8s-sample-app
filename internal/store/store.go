@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"time"
 
@@ -14,17 +16,29 @@ import (
 	"github.com/yama6a/cluster-sampleapp/data"
 )
 
-// defaultDSNTemplate is the in-cluster connection string. The password is taken
-// from the PG_PASSWORD environment variable.
-const defaultDSNTemplate = "postgresql://app:%s@cnpg-cluster-rw.databases.svc.cluster.local:5432/app"
-
-// DSNFromEnv returns the connection string. DATABASE_URL wins when set (handy for
-// local runs and tests); otherwise the in-cluster DSN is built from PG_PASSWORD.
+// DSNFromEnv assembles the Postgres connection string from the PG_* vars,
+// defaulting to the in-cluster sample-workload CloudNativePG read-write Service.
+// The password is escaped via url.URL, so a rotated password with URL-special
+// characters can't malform the DSN.
 func DSNFromEnv() string {
-	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
-		return dsn
+	dsn := url.URL{
+		Scheme: "postgresql",
+		User:   url.UserPassword(getenv("PG_USER", "app"), os.Getenv("PG_PASSWORD")),
+		Host: net.JoinHostPort(
+			getenv("PG_HOST", "sample-workload-cluster-rw.sample-workload.svc.cluster.local"),
+			getenv("PG_PORT", "5432"),
+		),
+		Path: "/" + getenv("PG_DATABASE", "app"),
 	}
-	return fmt.Sprintf(defaultDSNTemplate, os.Getenv("PG_PASSWORD"))
+	return dsn.String()
+}
+
+// getenv returns the value of key, or fallback when it is unset or empty.
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func NewDB(ctx context.Context, dsn string) (*sql.DB, error) {
