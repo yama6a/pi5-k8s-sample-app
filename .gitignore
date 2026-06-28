@@ -1,0 +1,4 @@
+/cluster-sampleapp
+*.dock
+.env.local
+.DS_Store

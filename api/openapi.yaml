@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: Cluster Sample App
+  description: A minimal spec-driven sample app that echoes request headers.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /:
+    get:
+      operationId: getHeaders
+      summary: Echo all request headers and the bootstrap timestamp as plain text.
+      responses:
+        "200":
+          description: Plain-text dump of every request header plus the bootstrap timestamp.
+          content:
+            text/plain:
+              schema:
+                type: string
