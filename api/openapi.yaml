@@ -1,21 +1,36 @@
 openapi: 3.0.3
 info:
-  title: Cluster Sample App
-  description: A minimal spec-driven sample app that echoes request headers.
+  title: Cluster Sample App — User Manager
+  description: The read model of the sample-user-manager service — lists the users it has persisted.
   version: 1.0.0
 
 servers:
   - url: http://localhost:8080
 
 paths:
-  /:
+  /users:
     get:
-      operationId: getHeaders
-      summary: Echo all request headers and the bootstrap timestamp as plain text.
+      operationId: listUsers
+      summary: List all persisted users (id + creation timestamp).
       responses:
         "200":
-          description: Plain-text dump of every request header plus the bootstrap timestamp.
+          description: The users currently stored, oldest first.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time

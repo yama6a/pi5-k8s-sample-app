@@ -74,13 +74,61 @@ func New(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-// BootstrapTime returns the timestamp of the row seeded when the database was
-// first migrated.
-func (s *Store) BootstrapTime(ctx context.Context) (time.Time, error) {
-	var t time.Time
-	err := s.db.QueryRowContext(ctx, "SELECT created_at FROM sample ORDER BY created_at LIMIT 1").Scan(&t)
+// User is a persisted user: its id and creation time both originate in the create-user-command.
+type User struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// CreateUser persists a user with the given id and creation time (both from the command payload).
+func (s *Store) CreateUser(ctx context.Context, id string, createdAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, "INSERT INTO users (id, created_at) VALUES ($1, $2)", id, createdAt)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("query bootstrap time: %w", err)
+		return fmt.Errorf("insert user: %w", err)
 	}
-	return t, nil
+	return nil
+}
+
+// ListUsers returns every user, oldest first.
+func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, created_at FROM users ORDER BY created_at")
+	if err != nil {
+		return nil, fmt.Errorf("query users: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	users := []User{}
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate users: %w", err)
+	}
+	return users, nil
+}
+
+// CountUsers returns the number of persisted users.
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM users").Scan(&n); err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteOldestUser deletes the oldest user (by created_at) and returns it. It returns
+// sql.ErrNoRows if the table is empty.
+func (s *Store) DeleteOldestUser(ctx context.Context) (User, error) {
+	var u User
+	err := s.db.QueryRowContext(ctx,
+		"DELETE FROM users WHERE id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1) RETURNING id, created_at",
+	).Scan(&u.ID, &u.CreatedAt)
+	if err != nil {
+		return User{}, fmt.Errorf("delete oldest user: %w", err)
+	}
+	return u, nil
 }

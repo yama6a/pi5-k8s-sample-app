@@ -1,6 +1,3 @@
-MAIN_FILE=cmd/app/main.go
-BINARY=cluster-sampleapp
-
 .PHONY: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -10,12 +7,22 @@ generate: ## Generate the HTTP server from the OpenAPI spec.
 	go generate ./...
 
 .PHONY: build
-build: ## Build the binary.
-	go build -o $(BINARY) $(MAIN_FILE)
+build: ## Build all three binaries (manager + signup + auditor) into bin/.
+	go build -o bin/manager ./cmd/manager
+	go build -o bin/signup ./cmd/signup
+	go build -o bin/auditor ./cmd/auditor
 
 .PHONY: run
-run: ## Run the app locally (expects DATABASE_URL or PG_PASSWORD).
-	go run $(MAIN_FILE)
+run: ## Run the manager locally (expects PG_* + RABBITMQ_* + WORKLOAD_NAME).
+	go run ./cmd/manager
+
+.PHONY: run-signup
+run-signup: ## Run the signup service locally (expects RABBITMQ_* + WORKLOAD_NAME).
+	go run ./cmd/signup
+
+.PHONY: run-auditor
+run-auditor: ## Run the auditor service locally (expects RABBITMQ_* + WORKLOAD_NAME).
+	go run ./cmd/auditor
 
 .PHONY: test
 test: ## Run tests (starts a Postgres container via Docker).

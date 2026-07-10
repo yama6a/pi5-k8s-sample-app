@@ -12,18 +12,18 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Echo all request headers and the bootstrap timestamp as plain text.
-	// (GET /)
-	GetHeaders(w http.ResponseWriter, r *http.Request)
+	// List all persisted users (id + creation timestamp).
+	// (GET /users)
+	ListUsers(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// Echo all request headers and the bootstrap timestamp as plain text.
-// (GET /)
-func (_ Unimplemented) GetHeaders(w http.ResponseWriter, r *http.Request) {
+// List all persisted users (id + creation timestamp).
+// (GET /users)
+func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -36,11 +36,11 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetHeaders operation middleware
-func (siw *ServerInterfaceWrapper) GetHeaders(w http.ResponseWriter, r *http.Request) {
+// ListUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetHeaders(w, r)
+		siw.Handler.ListUsers(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -164,7 +164,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/", wrapper.GetHeaders)
+		r.Get(options.BaseURL+"/users", wrapper.ListUsers)
 	})
 
 	return r

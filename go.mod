@@ -4,8 +4,10 @@ go 1.26.4
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.7.1
+	github.com/rabbitmq/amqp091-go v1.12.0
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0
@@ -38,7 +40,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/jsonpointer v0.22.4 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.4 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

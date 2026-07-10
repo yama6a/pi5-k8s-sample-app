@@ -2,13 +2,15 @@ package handler_test
 
 import (
 	"context"
-	"io"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -20,7 +22,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
-func startServer(t *testing.T) *httptest.Server {
+func newStore(t *testing.T) *store.Store {
 	t.Helper()
 
 	ctx := context.Background()
@@ -44,64 +46,45 @@ func startServer(t *testing.T) *httptest.Server {
 	t.Cleanup(func() { _ = db.Close() })
 
 	require.NoError(t, store.Migrate(db, zap.NewNop()))
-
-	router := chi.NewRouter()
-	api.HandlerFromMux(handler.NewServer(store.New(db), zap.NewNop()), router)
-
-	srv := httptest.NewServer(router)
-	t.Cleanup(srv.Close)
-	return srv
+	return store.New(db)
 }
 
-func TestGetHeaders(t *testing.T) {
+func TestListUsers(t *testing.T) {
 	t.Parallel()
 
-	srv := startServer(t)
+	st := newStore(t)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/", nil)
+	// Seed two users with distinct creation times so ordering (oldest first) is observable.
+	older := uuid.NewString()
+	newer := uuid.NewString()
+	require.NoError(t, st.CreateUser(t.Context(), older, time.Now().Add(-time.Hour)))
+	require.NoError(t, st.CreateUser(t.Context(), newer, time.Now()))
+
+	router := chi.NewRouter()
+	api.HandlerFromMux(handler.NewServer(st, zap.NewNop()), router)
+	srv := httptest.NewServer(router)
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/users", nil)
 	require.NoError(t, err)
-	req.Header.Set("X-Custom-Header", "hello-world")
 
 	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Contains(t, resp.Header.Get("Content-Type"), "text/plain")
+	require.Contains(t, resp.Header.Get("Content-Type"), "application/json")
 
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	text := string(body)
+	var users []store.User
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&users))
+	require.Len(t, users, 2)
 
-	// The request header is echoed back.
-	require.Contains(t, text, "X-Custom-Header: hello-world")
-
-	// The bootstrap line is present and holds a valid RFC3339 UTC timestamp.
-	const prefix = "Sample App Bootstrapped At: "
-	idx := -1
-	for i, line := range splitLines(text) {
-		if len(line) > len(prefix) && line[:len(prefix)] == prefix {
-			idx = i
-			ts, perr := time.Parse(time.RFC3339Nano, line[len(prefix):])
-			require.NoError(t, perr)
-			require.Equal(t, time.UTC, ts.Location())
-			require.WithinDuration(t, time.Now(), ts, time.Hour)
-		}
+	// Oldest first, and every user has a UUID + a valid UTC timestamp.
+	assert.Equal(t, older, users[0].ID)
+	assert.Equal(t, newer, users[1].ID)
+	for _, u := range users {
+		_, perr := uuid.Parse(u.ID)
+		require.NoError(t, perr)
+		assert.False(t, u.CreatedAt.IsZero())
 	}
-	require.GreaterOrEqual(t, idx, 0, "bootstrap line missing")
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }
