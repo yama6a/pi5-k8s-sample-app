@@ -1,11 +1,8 @@
 package handler
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
-	"sort"
-	"strings"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -21,29 +18,19 @@ func NewServer(s *store.Store, logger *zap.Logger) *Server {
 	return &Server{store: s, logger: logger}
 }
 
-// GetHeaders implements the generated api.ServerInterface: it echoes every
-// request header back as plain text, followed by the bootstrap timestamp.
-func (s *Server) GetHeaders(w http.ResponseWriter, r *http.Request) {
-	bootstrapped, err := s.store.BootstrapTime(r.Context())
+// ListUsers implements the generated api.ServerInterface: it returns every persisted user as a
+// JSON array of {id, createdAt}, oldest first. store.User's JSON tags match the OpenAPI schema.
+func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
-		s.logger.Error("read bootstrap time", zap.Error(err))
+		s.logger.Error("list users", zap.Error(err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	keys := make([]string, 0, len(r.Header))
-	for k := range r.Header {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var b strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&b, "%s: %s\n", k, strings.Join(r.Header[k], ", "))
-	}
-	fmt.Fprintf(&b, "\nSample App Bootstrapped At: %s\n", bootstrapped.UTC().Format(time.RFC3339Nano))
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, b.String())
+	if err := json.NewEncoder(w).Encode(users); err != nil {
+		s.logger.Error("encode users", zap.Error(err))
+	}
 }
