@@ -61,7 +61,9 @@ func TestListUsers(t *testing.T) {
 	require.NoError(t, st.CreateUser(t.Context(), newer, time.Now()))
 
 	router := chi.NewRouter()
-	api.HandlerFromMux(handler.NewServer(st, zap.NewNop()), router)
+	// nil audit store: TestListUsers exercises only GET /users, which doesn't touch Redis. The audit
+	// store has its own testcontainer-backed test in internal/audit.
+	api.HandlerFromMux(handler.NewServer(st, nil, zap.NewNop()), router)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 
