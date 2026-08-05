@@ -45,7 +45,7 @@ jobs:
         with:
           context: .
           file: .build/Dockerfile # the Dockerfile isn't at the repo root
-          platforms: linux/arm64 # arm64 only
+          platforms: linux/amd64,linux/arm64 # pushes a manifest list, one image per arch
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
           cache-from: type=gha

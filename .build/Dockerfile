@@ -8,7 +8,10 @@ COPY . .
 
 # Three binaries in one image: the manager (HTTP + Postgres + messaging hub), signup, and auditor.
 # Same module, same layer cache; each runtime picks one via its entrypoint/command.
-RUN --mount=type=cache,target=/root/.cache/go-build \
+# Per-arch build cache id: the amd64 and arm64 builds run concurrently and would
+# otherwise thrash a single shared mount. The module cache is arch-independent.
+RUN --mount=type=cache,target=/root/.cache/go-build,id=go-build-$TARGETARCH \
+    --mount=type=cache,target=/go/pkg/mod,id=go-mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags='-s -w' -o manager ./cmd/manager && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags='-s -w' -o signup  ./cmd/signup && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags='-s -w' -o auditor ./cmd/auditor
