@@ -72,6 +72,51 @@ make run-signup  # run the signup service locally
 make run-auditor # run the auditor service locally
 ```
 
+## Dependency updates
+
+Renovate bumps every pin in the repo: Go modules and the `go` directive (`gomod`), the base images in
+`.build/Dockerfile` (`dockerfile`, digest-pinned), and the action refs in `.github/workflows` (`github-actions`,
+digest-pinned).
+
+- Config: [`renovate.json5`](renovate.json5)
+- Runner: [`.github/workflows/renovate.yaml`](.github/workflows/renovate.yaml), cron every 3h plus
+  `workflow_dispatch`
+
+One-time setup:
+
+1. Create a PAT. Fine-grained: this repo, Contents + Pull requests + Workflows + Issues read-write. Or classic:
+   `repo` + `workflow`.
+2. Add it as the repo secret `RENOVATE_TOKEN`. The built-in `GITHUB_TOKEN` cannot open PRs that re-trigger
+   workflows and lacks the scope.
+3. Run the workflow by hand. It populates the dependency-dashboard issue and opens the first PRs (one of them
+   pins every action and base image to a digest).
+4. Require the `ci` check on `main`, no required reviews. Renovate cannot approve its own PR, so a required
+   review deadlocks the automerge.
+
+```bash
+gh api -X PUT repos/yama6a/cluster-sampleapp/branches/main/protection \
+  -H "Accept: application/vnd.github+json" --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "checks": [{"context": "ci"}] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+```
+
+Non-major updates land in one combined PR that Renovate merges itself once `ci` is green. `platformAutomerge`
+is off, so the merge happens on a LATER run, which is why the cron is 3-hourly and not weekly. Majors get their
+own reviewed PR each, except the testcontainers modules, which stay grouped with the core module.
+
+Two things to know:
+
+- Every automerged bump is a push to `main`, so build-push cuts a release and pushes a new image tag. Bumps and
+  releases are 1:1.
+- oapi-codegen is excluded from automerge. `make ci` regenerates `api/server.gen.go` and builds against the
+  fresh output but never commits it, so a codegen bump that changes the output goes green with a stale
+  `server.gen.go` in the tree. Run `make generate` and commit the diff on that PR.
+
 ## Tests
 
 `internal/handler/handler_test.go` starts a real Postgres
