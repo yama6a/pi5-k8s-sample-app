@@ -27,3 +27,7 @@ jobs:
 
       - name: make ci
         run: make ci
+
+      # Renovate silently falls back to its defaults on a broken config, so validate it here instead.
+      - name: Validate renovate config
+        run: npx --yes --package renovate -- renovate-config-validator --strict

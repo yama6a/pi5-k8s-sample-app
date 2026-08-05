@@ -1,0 +1,72 @@
+{
+  // Opens dependency-update PRs for every pin in the repo. Which manager owns what:
+  //   gomod           go.mod + go.sum, including the `go` directive
+  //   dockerfile      the build and runtime base images in .build/Dockerfile
+  //   github-actions  the action pins in .github/workflows/*.yaml
+  // Cadence is the cron in .github/workflows/renovate.yaml, not an internal `schedule`, so a manual
+  // workflow_dispatch works too. Docs: README.md, "Dependency updates".
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    ":dependencyDashboard", // one issue listing every pending/failed update (needs repo Issues enabled)
+    "helpers:pinGitHubActionDigestsToSemver", // action pins carry a readable version alongside the digest
+  ],
+  prConcurrentLimit: 12,
+  prHourlyLimit: 0, // no hourly throttle
+  dependencyDashboardTitle: "Renovate dependency dashboard",
+
+  // Automerge through Renovate's own API call, not GitHub's native auto-merge. Renovate waits for a PR's
+  // required CI checks by default, and branch protection enforces them on the merge call too, so the combined
+  // PR lands on a LATER run once CI is green. That is why the cron runs every 3h rather than weekly.
+  // platformAutomerge stays false to keep the merge on Renovate's side.
+  platformAutomerge: false,
+
+  // A gomod bump can leave tools.go's transitive requirements stale in go.mod.
+  postUpdateOptions: ["gomodTidy"],
+
+  packageRules: [
+    {
+      // ONE combined, auto-merged PR for every NON-major update, gated on the `ci` check.
+      // WARNING: merging to main runs build-push.yaml, which cuts a new GitHub release and pushes a new
+      // ghcr.io image tag. Every automerged bump therefore produces a release. Accepted for a sample app;
+      // to slow it down, add minimumReleaseAge or drop automerge here.
+      description: "combine all non-major updates into one auto-merged PR",
+      matchUpdateTypes: ["minor", "patch", "digest", "pin", "lockFileMaintenance"],
+      groupName: "all non-major dependencies",
+      automerge: true,
+    },
+    // MAJOR updates get their own PR each, which is Renovate's default, so no rule below does it. The
+    // testcontainers modules are the exception: they must move in lockstep with the core module.
+    {
+      description: "keep testcontainers majors together (modules must match the core module version)",
+      matchPackageNames: [
+        "github.com/testcontainers/testcontainers-go{,/**}",
+      ],
+      matchUpdateTypes: ["major"],
+      groupName: "testcontainers (major)",
+    },
+    {
+      // `make ci` regenerates api/server.gen.go and then builds against the fresh output, but the regenerated
+      // file is never committed by CI. A codegen bump that changes the output leaves the committed
+      // server.gen.go stale and green, so it gets a reviewed PR instead of an automerge.
+      description: "oapi-codegen: no automerge (CI does not detect generated-code drift)",
+      matchPackageNames: ["github.com/oapi-codegen/oapi-codegen/v2"],
+      automerge: false,
+    },
+    {
+      // Pin action refs to commit digests, so a moving tag cannot swap the action's code under us. The
+      // semver-comment helper above keeps a readable version beside each digest.
+      description: "pin github action refs to digests",
+      matchManagers: ["github-actions"],
+      pinDigests: true,
+    },
+    {
+      // distroless/static:nonroot is a rolling tag with no version in it, so a digest pin is the only way
+      // Renovate can track it at all. golang:<major>.<minor>-alpine gets a digest for the same reason its
+      // patch releases move under a fixed tag.
+      description: "pin base images to digests",
+      matchManagers: ["dockerfile"],
+      pinDigests: true,
+    },
+  ],
+}
