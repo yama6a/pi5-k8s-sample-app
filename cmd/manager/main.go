@@ -2,9 +2,10 @@
 // user domain: an HTTP read model (GET /users backed by Postgres, GET /audit backed by Redis) and the
 // command/event hub of the messaging demo. It consumes the `create-user-command` (direct) and, per
 // command, persists the user, emits `users.created` on the `user-events` topic, and records an audit
-// event that is BOTH broadcast on the `user-audit-logger` fanout and stored in Redis (per-user list,
-// 1h TTL) — then, once there are more than maxUsers, deletes the oldest user, emitting `users.deleted`
-// + another audit event. See raspi-cluster docs/11_messaging.md and docs/12_redis.md.
+// event that is BOTH broadcast on the `user-audit-logger` fanout and stored in the audit Redis (per-user
+// list, 1h TTL), and opens a session in the second, durable Redis. Once there are more than maxUsers it
+// deletes the oldest user, emitting `users.deleted` + another audit event and closing that user's
+// session. See raspi-cluster docs/11_messaging.md and docs/12_redis.md.
 package main
 
 import (
@@ -27,6 +28,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/handler"
 	"github.com/yama6a/cluster-sampleapp/internal/messages"
 	"github.com/yama6a/cluster-sampleapp/internal/mq"
+	"github.com/yama6a/cluster-sampleapp/internal/session"
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
@@ -73,6 +75,15 @@ func run(logger *zap.Logger) error {
 	defer func() { _ = rdb.Close() }()
 	auditStore := audit.New(rdb)
 
+	// The second, durable Redis instance: one session hash per user, opened on create and closed on
+	// eviction. Separate client because it's a separate instance, dialled via REDIS_SESSIONS_ADDR.
+	sdb, err := session.NewClient(connectCtx, session.OptionsFromEnv())
+	if err != nil {
+		return fmt.Errorf("connect sessions redis: %w", err)
+	}
+	defer func() { _ = sdb.Close() }()
+	sessionStore := session.New(sdb)
+
 	// Messaging config: connection + identity only (required — no silent defaults). The topology
 	// names are compile-time constants in internal/messages, so they can't be misconfigured per-pod.
 	env := &mq.Env{}
@@ -89,7 +100,7 @@ func run(logger *zap.Logger) error {
 	// internally and stops when ctx is cancelled, so a broker outage can't take down the HTTP server.
 	go mq.Consume(ctx, logger, uri, messages.ExchangeCreateUserCommand, workload,
 		func(ctx context.Context, _ string, body []byte) error {
-			return handleCreateUser(ctx, logger, st, auditStore, publisher, workload, body)
+			return handleCreateUser(ctx, logger, st, auditStore, sessionStore, publisher, workload, body)
 		})
 
 	router := chi.NewRouter()
@@ -126,7 +137,7 @@ func run(logger *zap.Logger) error {
 // handleCreateUser is the command handler: persist the user, announce it (event + audit), and evict
 // the oldest if we're over the cap (announcing that too). A failed step returns an error so mq logs
 // it; with autoAck the message isn't redelivered (fine for this demo).
-func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, auditStore *audit.Store, pub *mq.Publisher, workload string, body []byte) error {
+func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, auditStore *audit.Store, sessionStore *session.Store, pub *mq.Publisher, workload string, body []byte) error {
 	var cmd messages.CreateUserCommand
 	if err := json.Unmarshal(body, &cmd); err != nil {
 		return fmt.Errorf("unmarshal command: %w", err)
@@ -142,6 +153,9 @@ func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, 
 	logger.Info("user created", zap.String("uuid", cmd.UUID))
 	publishUserEvent(ctx, logger, pub, messages.RoutingKeyUserCreated, cmd.UUID, cmd.Timestamp)
 	recordAndPublishAudit(ctx, logger, auditStore, pub, workload, messages.ActionUserCreated, cmd.UUID)
+	if err := sessionStore.Start(ctx, workload, cmd.UUID, createdAt); err != nil {
+		logger.Error("start session", zap.String("uuid", cmd.UUID), zap.Error(err))
+	}
 
 	count, err := st.CountUsers(ctx)
 	if err != nil {
@@ -155,6 +169,15 @@ func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, 
 		logger.Info("user evicted", zap.String("uuid", deleted.ID), zap.Int("countBefore", count))
 		recordAndPublishAudit(ctx, logger, auditStore, pub, workload, messages.ActionUserDeleted, deleted.ID)
 		publishUserEvent(ctx, logger, pub, messages.RoutingKeyUserDeleted, deleted.ID, deleted.CreatedAt.UTC().Format(time.RFC3339))
+		if err := sessionStore.End(ctx, deleted.ID, time.Now().UTC()); err != nil {
+			logger.Error("end session", zap.String("uuid", deleted.ID), zap.Error(err))
+		}
+	}
+
+	if active, err := sessionStore.ActiveCount(ctx); err != nil {
+		logger.Error("count active sessions", zap.Error(err))
+	} else {
+		logger.Info("active sessions", zap.Int64("count", active))
 	}
 	return nil
 }
