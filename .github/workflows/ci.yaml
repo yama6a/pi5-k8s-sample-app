@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest # has a running Docker daemon for the testcontainers Postgres
+    runs-on: ubuntu-24.04-arm # has a running Docker daemon for the testcontainers Postgres
     steps:
       - uses: actions/checkout@v4
 
