@@ -185,7 +185,11 @@ func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, 
 // publishUserEvent emits a UserEvent to the user-events topic exchange with the given routing key.
 // Publish failures are logged, not fatal: the DB write already succeeded and the loop reconnects.
 func publishUserEvent(ctx context.Context, logger *zap.Logger, pub *mq.Publisher, routingKey, uuid, timestamp string) {
-	body, _ := json.Marshal(messages.UserEvent{UUID: uuid, Timestamp: timestamp})
+	body, err := json.Marshal(messages.UserEvent{UUID: uuid, Timestamp: timestamp})
+	if err != nil {
+		logger.Error("marshal user event", zap.String("routingKey", routingKey), zap.Error(err))
+		return
+	}
 	if err := pub.Publish(ctx, messages.ExchangeUserEvents, routingKey, body); err != nil {
 		logger.Error("publish user event", zap.String("routingKey", routingKey), zap.Error(err))
 	}
@@ -205,7 +209,11 @@ func recordAndPublishAudit(ctx context.Context, logger *zap.Logger, auditStore *
 	if err := auditStore.Record(ctx, entry); err != nil {
 		logger.Error("record audit log", zap.String("action", action), zap.Error(err))
 	}
-	body, _ := json.Marshal(entry)
+	body, err := json.Marshal(entry)
+	if err != nil {
+		logger.Error("marshal audit log", zap.String("action", action), zap.Error(err))
+		return
+	}
 	if err := pub.Publish(ctx, messages.ExchangeUserAuditLogger, "", body); err != nil {
 		logger.Error("publish audit log", zap.String("action", action), zap.Error(err))
 	}
