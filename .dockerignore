@@ -1,0 +1,9 @@
+/.git
+/.github
+/.build
+/bin
+/cluster-sampleapp
+*.dock
+.env.local
+.DS_Store
+*.md
