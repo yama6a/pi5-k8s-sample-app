@@ -2,3 +2,7 @@
 *.dock
 .env.local
 .DS_Store
+/bin/
+/.build/canonical-golangci.yaml
+/.build/golangci.yaml
+cover.out
