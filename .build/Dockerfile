@@ -1,6 +1,6 @@
 # Build — runs on the builder's native arch, cross-compiles to the target arch
 # (TARGETOS/TARGETARCH are provided by buildx), so no QEMU emulation is needed.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS build
 ARG TARGETOS TARGETARCH
 
 WORKDIR /app
@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build,id=go-build-$TARGETARCH \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags='-s -w' -o auditor ./cmd/auditor
 
 # Run
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static:nonroot@sha256:1c2c046bc09ed40fad370b599a0b1ae7987f55b01e247cf27a7c27cd97e5bbc7
 WORKDIR /
 COPY --from=build /app/manager /manager
 COPY --from=build /app/signup  /signup

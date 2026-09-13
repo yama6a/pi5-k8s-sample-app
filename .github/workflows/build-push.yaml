@@ -14,10 +14,12 @@ concurrency:
 permissions:
   contents: write # required to create the GitHub release
   packages: write # required, or the image push fails with permission_denied
+  id-token: write # mints the OIDC token the provenance attestation is signed with
+  attestations: write # stores that attestation
 
 jobs:
   build:
-    uses: yama6a/gha/.github/workflows/docker-build-release-multiarch.yaml@v1
+    uses: yama6a/gha/.github/workflows/docker-build-release-multiarch.yaml@v2
     with:
       dockerfile: .build/Dockerfile # the Dockerfile isn't at the repo root
 
@@ -25,7 +27,7 @@ jobs:
   # let ArgoCD sync. One image backs three workloads, so every chart pinning it moves in the same PR.
   deploy-private:
     needs: build
-    uses: yama6a/gha/.github/workflows/deploy-gitops.yaml@v1
+    uses: yama6a/gha/.github/workflows/deploy-gitops.yaml@v2
     permissions: {} # nothing from THIS repo is needed; DEPLOY_TOKEN carries the rights
     with:
       tag: ${{ needs.build.outputs.version }}
@@ -38,7 +40,7 @@ jobs:
 
   deploy-public:
     needs: build
-    uses: yama6a/gha/.github/workflows/deploy-gitops.yaml@v1
+    uses: yama6a/gha/.github/workflows/deploy-gitops.yaml@v2
     permissions: {}
     with:
       tag: ${{ needs.build.outputs.version }}

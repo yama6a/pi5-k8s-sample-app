@@ -88,10 +88,14 @@ func signupLoop(ctx context.Context, logger *zap.Logger, pub *mq.Publisher) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			body, _ := json.Marshal(messages.CreateUserCommand{
+			body, err := json.Marshal(messages.CreateUserCommand{
 				UUID:      uuid.NewString(),
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 			})
+			if err != nil {
+				logger.Error("marshal create-user-command", zap.Error(err))
+				continue
+			}
 			// Direct exchange: routing key == the exchange name (how the topology library binds the
 			// single command queue). A failed publish is logged; the ticker will try again.
 			if err := pub.Publish(ctx, messages.ExchangeCreateUserCommand, messages.ExchangeCreateUserCommand, body); err != nil {
