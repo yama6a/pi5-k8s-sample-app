@@ -64,6 +64,7 @@ own queue name (`<WORKLOAD_NAME>.<exchange>`) to match the topology operator's n
 ## Develop
 
 ```sh
+make ci          # everything CI runs: tidy, generate, fmt, lint, vet, test, vuln
 make generate    # regenerate the server from the spec
 make build       # build all three binaries (bin/manager, bin/signup, bin/auditor)
 make test        # run tests (spins up a Postgres container via Docker)
@@ -71,6 +72,9 @@ make run         # run the manager locally
 make run-signup  # run the signup service locally
 make run-auditor # run the auditor service locally
 ```
+
+Lint runs against the canonical config from [yama6a/gha](https://github.com/yama6a/gha), fetched into
+`.build/` by `make lint-config`. There is no `.golangci.yaml` here.
 
 ## Dependency updates
 
@@ -90,14 +94,14 @@ One-time setup:
    workflows and lacks the scope.
 3. Run the workflow by hand. It populates the dependency-dashboard issue and opens the first PRs (one of them
    pins every action and base image to a digest).
-4. Require the `ci / golangci-lint - go vet - go test - govulncheck` check on `main`, no required reviews.
-   Renovate cannot approve its own PR, so a required review deadlocks the automerge.
+4. Require the `go / go` and `renovate-config` checks on `main`, no required reviews. Renovate cannot
+   approve its own PR, so a required review deadlocks the automerge.
 
 ```bash
 gh api -X PUT repos/yama6a/pi5-k8s-sample-app/branches/main/protection \
   -H "Accept: application/vnd.github+json" --input - <<'JSON'
 {
-  "required_status_checks": { "strict": true, "checks": [{"context": "ci / golangci-lint - go vet - go test - govulncheck"}] },
+  "required_status_checks": { "strict": false, "checks": [{"context": "go / go"}, {"context": "renovate-config"}] },
   "enforce_admins": false,
   "required_pull_request_reviews": null,
   "restrictions": null
@@ -110,14 +114,9 @@ is off, so the merge happens on a LATER run: the first nightly run opens, the se
 merges. Majors get their own reviewed PR each, except the testcontainers modules, which stay grouped with the
 core module.
 
-Two things to know:
-
-- Every automerged bump is a push to `main`, so build-push cuts a release, pushes a new image tag, and opens
-  an auto-merging PR in `offgrid-private` and `offgrid` that bumps the three charts pinning it. Bumps and
-  releases are 1:1.
-- oapi-codegen is excluded from automerge. CI builds against the committed `api/server.gen.go` and never
-  regenerates it, so a codegen bump that changes the output goes green with a stale `server.gen.go` in the
-  tree. Run `make generate` and commit the diff on that PR.
+One thing to know: every automerged bump is a push to `main`, so build-push cuts a release, pushes a new
+image tag, and opens an auto-merging PR in `offgrid-private` and `offgrid` that bumps the three charts
+pinning it. Bumps and releases are 1:1.
 
 ## Tests
 
