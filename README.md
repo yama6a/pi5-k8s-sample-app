@@ -79,8 +79,8 @@ Renovate bumps every pin in the repo: Go modules and the `go` directive (`gomod`
 digest-pinned).
 
 - Config: [`renovate.json5`](renovate.json5)
-- Runner: [`.github/workflows/renovate.yaml`](.github/workflows/renovate.yaml), cron every 3h plus
-  `workflow_dispatch`
+- Runner: [`.github/workflows/renovate.yaml`](.github/workflows/renovate.yaml), the shared workflow from
+  [yama6a/gha](https://github.com/yama6a/gha), twice a night plus `workflow_dispatch`
 
 One-time setup:
 
@@ -90,14 +90,14 @@ One-time setup:
    workflows and lacks the scope.
 3. Run the workflow by hand. It populates the dependency-dashboard issue and opens the first PRs (one of them
    pins every action and base image to a digest).
-4. Require the `ci` check on `main`, no required reviews. Renovate cannot approve its own PR, so a required
-   review deadlocks the automerge.
+4. Require the `ci / golangci-lint - go vet - go test - govulncheck` check on `main`, no required reviews.
+   Renovate cannot approve its own PR, so a required review deadlocks the automerge.
 
 ```bash
-gh api -X PUT repos/yama6a/cluster-sampleapp/branches/main/protection \
+gh api -X PUT repos/yama6a/pi5-k8s-sample-app/branches/main/protection \
   -H "Accept: application/vnd.github+json" --input - <<'JSON'
 {
-  "required_status_checks": { "strict": true, "checks": [{"context": "ci"}] },
+  "required_status_checks": { "strict": true, "checks": [{"context": "ci / golangci-lint - go vet - go test - govulncheck"}] },
   "enforce_admins": false,
   "required_pull_request_reviews": null,
   "restrictions": null
@@ -105,17 +105,19 @@ gh api -X PUT repos/yama6a/cluster-sampleapp/branches/main/protection \
 JSON
 ```
 
-Non-major updates land in one combined PR that Renovate merges itself once `ci` is green. `platformAutomerge`
-is off, so the merge happens on a LATER run, which is why the cron is 3-hourly and not weekly. Majors get their
-own reviewed PR each, except the testcontainers modules, which stay grouped with the core module.
+Non-major updates land in one combined PR that Renovate merges itself once CI is green. `platformAutomerge`
+is off, so the merge happens on a LATER run: the first nightly run opens, the second one 30 minutes later
+merges. Majors get their own reviewed PR each, except the testcontainers modules, which stay grouped with the
+core module.
 
 Two things to know:
 
-- Every automerged bump is a push to `main`, so build-push cuts a release and pushes a new image tag. Bumps and
+- Every automerged bump is a push to `main`, so build-push cuts a release, pushes a new image tag, and opens
+  an auto-merging PR in `offgrid-private` and `offgrid` that bumps the three charts pinning it. Bumps and
   releases are 1:1.
-- oapi-codegen is excluded from automerge. `make ci` regenerates `api/server.gen.go` and builds against the
-  fresh output but never commits it, so a codegen bump that changes the output goes green with a stale
-  `server.gen.go` in the tree. Run `make generate` and commit the diff on that PR.
+- oapi-codegen is excluded from automerge. CI builds against the committed `api/server.gen.go` and never
+  regenerates it, so a codegen bump that changes the output goes green with a stale `server.gen.go` in the
+  tree. Run `make generate` and commit the diff on that PR.
 
 ## Tests
 

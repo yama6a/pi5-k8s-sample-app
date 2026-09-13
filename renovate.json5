@@ -29,9 +29,9 @@
       groupName: "testcontainers (major)",
     },
     {
-      // `make ci` regenerates api/server.gen.go and then builds against the fresh output, but the regenerated
-      // file is never committed by CI. A codegen bump that changes the output leaves the committed
-      // server.gen.go stale and green, so it gets a reviewed PR instead of an automerge.
+      // CI builds against the committed api/server.gen.go and never regenerates it. A codegen bump that
+      // changes the output leaves the committed file stale and green, so it gets a reviewed PR instead
+      // of an automerge.
       description: "oapi-codegen: no automerge (CI does not detect generated-code drift)",
       matchPackageNames: ["github.com/oapi-codegen/oapi-codegen/v2"],
       automerge: false,
