@@ -28,5 +28,12 @@
       matchUpdateTypes: ["major"],
       groupName: "testcontainers (major)",
     },
+    // Newer go-yit snapshots moved to go.yaml.in/yaml/v4, which yaml-jsonpath (via oapi-codegen) does
+    // not compile against yet. Drop this once yaml-jsonpath releases a yaml/v4 build.
+    {
+      description: "hold go-yit at the yaml.v3 revision yaml-jsonpath builds against",
+      matchPackageNames: ["github.com/dprotaso/go-yit"],
+      enabled: false,
+    },
   ],
 }
