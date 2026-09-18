@@ -120,7 +120,9 @@ pinning it. Bumps and releases are 1:1.
 
 ## Tests
 
-`internal/handler/handler_test.go` starts a real Postgres
-([testcontainers-go](https://golang.testcontainers.org/)), runs the migrations, seeds a couple of
-users, and asserts `GET /users` returns them as JSON. Requires a running Docker daemon.
+`internal/handler/handler_test.go` gets a migrated Postgres database from
+[pgsandbox](https://github.com/yama6a/pgsandbox), seeds a couple of users, and asserts `GET /users`
+returns them as JSON. The `internal/audit` and `internal/session` tests start Redis through
+[testcontainers-go](https://golang.testcontainers.org/). Both need a running Docker daemon; the
+`pgsandbox-16` container stays up between runs, `docker rm -f pgsandbox-16` removes it.
 `internal/messages` and `internal/mq` carry broker-free unit tests.
