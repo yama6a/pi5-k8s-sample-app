@@ -2,7 +2,11 @@ package handler_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,43 +14,67 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/yama6a/pgsandbox"
 	"go.uber.org/zap"
 
 	"github.com/yama6a/cluster-sampleapp/api"
+	"github.com/yama6a/cluster-sampleapp/data"
 	"github.com/yama6a/cluster-sampleapp/internal/handler"
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
+// Same major as the CNPG cluster in offgrid-private.
+const pgMajor = 16
+
 func newStore(t *testing.T) *store.Store {
 	t.Helper()
 
-	ctx := context.Background()
+	sandbox := pgsandbox.New(t, pgMajor, pgsandbox.Migrate(migrationsKey(t), migrate))
 
-	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
-		tcpostgres.WithDatabase("app"),
-		tcpostgres.WithUsername("app"),
-		tcpostgres.WithPassword("secret"),
-		testcontainers.WithWaitStrategy(
-			wait.ForListeningPort("5432/tcp").WithStartupTimeout(60*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(ctx) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	db, err := store.NewDB(ctx, dsn)
+	db, err := store.NewDB(t.Context(), sandbox.DSN)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	require.NoError(t, store.Migrate(db, zap.NewNop()))
 	return store.New(db)
+}
+
+// migrate goes through store.Migrate rather than pgsandbox.Migrations, so the sql-migrate
+// bookkeeping table is part of every clone, as it is in production.
+func migrate(ctx context.Context, conn *pgx.Conn) error {
+	db, err := store.NewDB(ctx, conn.Config().ConnString())
+	if err != nil {
+		return fmt.Errorf("open blueprint: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := store.Migrate(db, zap.NewNop()); err != nil {
+		return fmt.Errorf("migrate blueprint: %w", err)
+	}
+	return nil
+}
+
+func migrationsKey(t *testing.T) string {
+	t.Helper()
+
+	h := sha256.New()
+	err := fs.WalkDir(data.FS, "migrations", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(data.FS, path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		h.Write([]byte(path))
+		h.Write(body)
+		return nil
+	})
+	require.NoError(t, err)
+
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 func TestListUsers(t *testing.T) {
