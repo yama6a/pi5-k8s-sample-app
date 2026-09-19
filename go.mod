@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
-	github.com/yama6a/pgsandbox v0.3.1
+	github.com/yama6a/pgsandbox v0.3.2
 	go.uber.org/zap v1.28.0
 )
 
