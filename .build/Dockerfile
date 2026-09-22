@@ -1,6 +1,6 @@
 # Build — runs on the builder's native arch, cross-compiles to the target arch
 # (TARGETOS/TARGETARCH are provided by buildx), so no QEMU emulation is needed.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:4cb7ac979db5fcc41cae44b2227ba5ab8a51e8807f40d9ba4dee20a0ad960b5b AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
 ARG TARGETOS TARGETARCH
 
 WORKDIR /app
