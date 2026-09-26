@@ -1,7 +1,4 @@
-// Package session tracks user sessions in the manager's durable Redis instance: one hash per user UUID
-// plus a set of the currently-active ones. It mirrors internal/audit in shape (*FromEnv config, a
-// NewClient that pings, a Store wrapping the client) but talks to the OTHER instance, the persistent
-// one, so sessions survive a restart. See raspi-cluster docs/12_redis.md.
+// Package session tracks user sessions in the manager's persistent Redis instance, so they survive a restart.
 package session
 
 import (
@@ -14,25 +11,21 @@ import (
 )
 
 const (
-	// keyPrefix namespaces the per-user session hashes (session:<uuid>).
 	keyPrefix = "session:"
-	// activeKey holds the UUIDs with an open session.
-	activeKey = "sessions:active"
-	// endedTTL keeps a closed session around for inspection while bounding growth: the instance runs
-	// `noeviction`, so an unbounded keyspace would eventually fail writes rather than evict.
+	activeKey = "sessions:active" // set of UUIDs with an open session
+	// endedTTL bounds the keyspace. The instance runs noeviction: with full memory it refuses writes
+	// instead of evicting keys.
 	endedTTL = 24 * time.Hour
 )
 
-// OptionsFromEnv builds go-redis options from the REDIS_SESSIONS_* vars, defaulting to the in-cluster
-// sessions Service. No password, same as the cache: a CiliumNetworkPolicy is the access control.
+// OptionsFromEnv reads REDIS_SESSIONS_ADDR and REDIS_SESSIONS_PASSWORD, defaulting to the in-cluster sessions Service.
 func OptionsFromEnv() *redis.Options {
 	return &redis.Options{
 		Addr:     getenv("REDIS_SESSIONS_ADDR", "sample-user-manager-redis-sessions.sample-user-manager.svc.cluster.local:6379"),
-		Password: os.Getenv("REDIS_SESSIONS_PASSWORD"),
+		Password: os.Getenv("REDIS_SESSIONS_PASSWORD"), // empty in-cluster: a CiliumNetworkPolicy gates the instance
 	}
 }
 
-// getenv returns the value of key, or fallback when it is unset or empty.
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -77,7 +70,7 @@ func (s *Store) Start(ctx context.Context, service, uuid string, at time.Time) e
 	return nil
 }
 
-// End closes uuid's session, drops it from the active set and puts the hash on the endedTTL clock.
+// End marks uuid's session ended, drops it from the active set and expires it after endedTTL.
 func (s *Store) End(ctx context.Context, uuid string, at time.Time) error {
 	key := keyPrefix + uuid
 

@@ -1,11 +1,5 @@
-// Command manager is the default binary of the sample-app image (sample-user-manager). It owns the
-// user domain: an HTTP read model (GET /users backed by Postgres, GET /audit backed by Redis) and the
-// command/event hub of the messaging demo. It consumes the `create-user-command` (direct) and, per
-// command, persists the user, emits `users.created` on the `user-events` topic, and records an audit
-// event that is BOTH broadcast on the `user-audit-logger` fanout and stored in the audit Redis (per-user
-// list, 1h TTL), and opens a session in the second, durable Redis. Once there are more than maxUsers it
-// deletes the oldest user, emitting `users.deleted` + another audit event and closing that user's
-// session. See raspi-cluster docs/11_messaging.md and docs/12_redis.md.
+// Command manager is the sample-user-manager binary: it serves GET /users and GET /audit, and turns
+// each create-user-command into a stored user, events, an audit message and a session.
 package main
 
 import (
@@ -32,8 +26,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
-// maxUsers caps the table: after each insert, if the count exceeds this, the oldest user is evicted
-// (and a users.deleted event + audit message are emitted). Small so the delete path is easy to see.
+// maxUsers is small, so the eviction path runs soon after start.
 const maxUsers = 10
 
 func main() {
@@ -66,8 +59,6 @@ func run(logger *zap.Logger) error {
 	}
 	st := store.New(db)
 
-	// Redis for the audit-log cache (per-user list, 1h TTL; read back by GET /audit). No password — the
-	// instance is gated by a CiliumNetworkPolicy, not requirepass. See raspi-cluster docs/12_redis.md.
 	rdb, err := audit.NewClient(connectCtx, audit.OptionsFromEnv())
 	if err != nil {
 		return fmt.Errorf("connect redis: %w", err)
@@ -75,8 +66,6 @@ func run(logger *zap.Logger) error {
 	defer func() { _ = rdb.Close() }()
 	auditStore := audit.New(rdb)
 
-	// The second, durable Redis instance: one session hash per user, opened on create and closed on
-	// eviction. Separate client because it's a separate instance, dialled via REDIS_SESSIONS_ADDR.
 	sdb, err := session.NewClient(connectCtx, session.OptionsFromEnv())
 	if err != nil {
 		return fmt.Errorf("connect sessions redis: %w", err)
@@ -84,8 +73,6 @@ func run(logger *zap.Logger) error {
 	defer func() { _ = sdb.Close() }()
 	sessionStore := session.New(sdb)
 
-	// Messaging config: connection + identity only (required — no silent defaults). The topology
-	// names are compile-time constants in internal/messages, so they can't be misconfigured per-pod.
 	env := &mq.Env{}
 	uri := mq.URIFromEnv(env)
 	workload := env.Require("WORKLOAD_NAME")
@@ -96,8 +83,7 @@ func run(logger *zap.Logger) error {
 	publisher := mq.NewPublisher(logger, uri)
 	defer publisher.Close()
 
-	// Consume the command topic and react. The handler owns the whole write path; it reconnects
-	// internally and stops when ctx is cancelled, so a broker outage can't take down the HTTP server.
+	// Consume reconnects on its own, so a broker outage never stops the HTTP server.
 	go mq.Consume(ctx, logger, uri, messages.ExchangeCreateUserCommand, workload,
 		func(ctx context.Context, _ string, body []byte) error {
 			return handleCreateUser(ctx, logger, st, auditStore, sessionStore, publisher, workload, body)
@@ -121,7 +107,7 @@ func run(logger *zap.Logger) error {
 
 	go func() {
 		<-ctx.Done()
-		// Detach from the now-cancelled parent so in-flight requests get the full grace period.
+		// Detach from the cancelled parent, so in-flight requests get the full grace period.
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
@@ -134,9 +120,7 @@ func run(logger *zap.Logger) error {
 	return nil
 }
 
-// handleCreateUser is the command handler: persist the user, announce it (event + audit), and evict
-// the oldest if we're over the cap (announcing that too). A failed step returns an error so mq logs
-// it; with autoAck the message isn't redelivered (fine for this demo).
+// handleCreateUser returns an error only for mq to log. With autoAck, a failed command is not redelivered.
 func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, auditStore *audit.Store, sessionStore *session.Store, pub *mq.Publisher, workload string, body []byte) error {
 	var cmd messages.CreateUserCommand
 	if err := json.Unmarshal(body, &cmd); err != nil {
@@ -182,8 +166,7 @@ func handleCreateUser(ctx context.Context, logger *zap.Logger, st *store.Store, 
 	return nil
 }
 
-// publishUserEvent emits a UserEvent to the user-events topic exchange with the given routing key.
-// Publish failures are logged, not fatal: the DB write already succeeded and the loop reconnects.
+// publishUserEvent only logs a failure, because the user is already stored.
 func publishUserEvent(ctx context.Context, logger *zap.Logger, pub *mq.Publisher, routingKey, uuid, timestamp string) {
 	body, err := json.Marshal(messages.UserEvent{UUID: uuid, Timestamp: timestamp})
 	if err != nil {
@@ -195,10 +178,8 @@ func publishUserEvent(ctx context.Context, logger *zap.Logger, pub *mq.Publisher
 	}
 }
 
-// recordAndPublishAudit builds one AuditLog and sends it to BOTH audit sinks: it persists it to Redis (a
-// per-user list with a 1h TTL — the source for GET /audit) and broadcasts it to the user-audit-logger
-// fanout exchange (routing key ignored). Both are best-effort: the DB write already succeeded, so a cache
-// or broker failure is logged, not fatal, and can't fail the command.
+// recordAndPublishAudit writes the entry to the audit Redis and the fanout exchange. It only logs a
+// failure, because the user is already stored.
 func recordAndPublishAudit(ctx context.Context, logger *zap.Logger, auditStore *audit.Store, pub *mq.Publisher, workload, action, uuid string) {
 	entry := messages.AuditLog{
 		Service:   workload,

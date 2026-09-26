@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Cluster Sample App — User Manager
+  title: "Cluster Sample App: User Manager"
   description: >-
-    The read model of the sample-user-manager service — lists the users it has persisted (Postgres) and
-    their recent audit events (Redis).
+    The read model of sample-user-manager: the users it stored in Postgres and their recent audit events
+    in Redis.
   version: 1.0.0
 
 servers:
@@ -13,7 +13,7 @@ paths:
   /users:
     get:
       operationId: listUsers
-      summary: List all persisted users (id + creation timestamp).
+      summary: List every stored user with its creation time.
       responses:
         "200":
           description: The users currently stored, oldest first.
@@ -30,8 +30,8 @@ paths:
       responses:
         "200":
           description: >-
-            A map of user UUID to that user's audit events. Each user's list is kept for 1h after their
-            most recent activity and then expires, and the user table is capped, so at most ~10 users appear.
+            A map of user UUID to that user's audit events. A user's list expires one hour after its
+            latest event.
           content:
             application/json:
               schema:
@@ -62,7 +62,7 @@ components:
           description: The emitting workload (WORKLOAD_NAME).
         action:
           type: string
-          description: "user.created | user.deleted"
+          description: user.created or user.deleted
         uuid:
           type: string
           format: uuid

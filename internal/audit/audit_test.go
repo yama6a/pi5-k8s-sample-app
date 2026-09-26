@@ -17,8 +17,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/messages"
 )
 
-// newStore spins up a throwaway Redis container and returns an audit.Store plus the raw client (for
-// assertions the Store doesn't expose, e.g. TTL). Mirrors internal/handler's testcontainer helper.
+// newStore also returns the raw client, for assertions the Store does not expose, such as TTLs.
 func newStore(t *testing.T) (*audit.Store, *redis.Client) {
 	t.Helper()
 
@@ -63,7 +62,7 @@ func TestRecordAndListAll(t *testing.T) {
 	userA := uuid.NewString()
 	userB := uuid.NewString()
 
-	// Two events for A (create then delete), one for B — events are kept per user, in insertion order.
+	// Two events for A, create then delete, and one for B. Each user keeps its events in insertion order.
 	require.NoError(t, st.Record(ctx, entry(userA, messages.ActionUserCreated)))
 	require.NoError(t, st.Record(ctx, entry(userA, messages.ActionUserDeleted)))
 	require.NoError(t, st.Record(ctx, entry(userB, messages.ActionUserCreated)))
@@ -88,7 +87,7 @@ func TestRecordSetsTTL(t *testing.T) {
 	user := uuid.NewString()
 	require.NoError(t, st.Record(ctx, entry(user, messages.ActionUserCreated)))
 
-	// The per-user key carries an expiry within the 1h window (so events self-clean).
+	// The list expires within ttl.
 	ttl, err := rdb.TTL(ctx, "audit:"+user).Result()
 	require.NoError(t, err)
 	assert.Positive(t, ttl)

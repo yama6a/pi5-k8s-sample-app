@@ -1,128 +1,97 @@
-# cluster-sampleapp
+# pi5-k8s-sample-app
 
-A spec-driven Go service that demonstrates a small user-lifecycle domain over RabbitMQ, exercising
-all three exchange types (direct / topic / fanout) plus Postgres persistence and an HTTP read model.
-One image bakes three binaries; each is deployed as its own workload.
+A Go demo service for the [offgrid](https://github.com/yama6a/offgrid) platform. It uses Postgres, two Redis
+instances and all three RabbitMQ exchange types. offgrid runs one image as three workloads.
 
-## Three services, one image
+## Three binaries, one image
 
-| Binary (`cmd/…`) | Workload | Role |
+| Binary | Workload | Does |
 | --- | --- | --- |
-| `/manager` (default) | sample-user-manager | HTTP (`GET /users`) + Postgres. Consumes `create-user-command`; per command it persists the user, emits `users.created` + an audit message, and — once there are more than 10 users — deletes the oldest and emits `users.deleted` + an audit message. |
-| `/signup` | sample-user-signup | Emits `create-user-command` every 10s (`{uuid, timestamp}`). Consumes `users.created` and every audit message, logging both. |
-| `/auditor` | sample-audit-logger | Consumes **only** audit messages, logging each to stdout. |
+| `/manager`, the default entrypoint | sample-user-manager | Serves `GET /users` from Postgres and `GET /audit` from Redis. Per `create-user-command` it stores the user, emits `users.created` and an audit message, and opens a session. Above `maxUsers` it deletes the oldest user and emits `users.deleted` and an audit message |
+| `/signup` | sample-user-signup | Publishes a `create-user-command` on a fixed interval. Logs `users.created` events and every audit message |
+| `/auditor` | sample-audit-logger | Logs every audit message |
 
-### Topology — one of each exchange type
+## Messaging topology
 
-| Exchange | Type | Owner | Published | Consumed by |
-| --- | --- | --- | --- | --- |
-| `create-user-command` | **direct** (command, N→1) | manager | signup | manager |
-| `user-events` | **topic** (event, 1→N, filtered) | manager | `users.created`, `users.deleted` | signup binds **only** `users.created`; `users.deleted` has no consumer by design |
-| `user-audit-logger` | **fanout** (broadcast, 1→all) | manager | every create/delete | signup **and** auditor |
+| Exchange | Type | Published by | Consumed by |
+| --- | --- | --- | --- |
+| `create-user-command` | direct: one command queue | signup | manager |
+| `user-events` | topic: each queue binds the keys it wants | manager: `users.created`, `users.deleted` | signup, which binds only `users.created` |
+| `user-audit-logger` | fanout: every bound queue gets every message | manager | signup and auditor |
 
-This is the teaching point: **direct** = point-to-point command; **topic** = broker-side routing where
-each consumer binds the keys it wants (so `users.deleted` is simply dropped); **fanout** = broadcast to
-two independent subscribers. Topology (exchanges/queues) is owned by the RabbitMQ topology operator in
-the deployment repo — the binaries only publish and consume, reconnecting on failure. The message
-shapes and topology names live in [`internal/messages`](internal/messages).
+- No queue binds `users.deleted`, so the broker drops it. That shows topic routing.
+- The Messaging Topology Operator in offgrid declares every exchange and queue. The binaries only publish and
+  consume, and reconnect after any failure. So a pod that starts before its queue exists recovers by itself.
+- The names are constants in [`internal/messages`](internal/messages), so no pod can misconfigure them. They
+  must match the topology values in offgrid's sample charts.
+- Consumers use autoAck. A message whose handler fails is lost. The demo shows routing, not delivery guarantees.
 
-## How it works
+## Design
 
-- **Spec-driven server.** The HTTP server interface is generated from
-  [`api/openapi.yaml`](api/openapi.yaml) with
-  [`oapi-codegen`](https://github.com/oapi-codegen/oapi-codegen) (chi server).
-  Regenerate with `make generate`; never edit `api/server.gen.go` by hand.
-- **Postgres.** The manager connects via `pgx` (through the `database/sql` adapter).
-- **Migrations.** [`rubenv/sql-migrate`](https://github.com/rubenv/sql-migrate)
-  runs the embedded SQL in [`data/migrations`](data/migrations) on startup — a single
-  `users` table (`id UUID`, `created_at TIMESTAMPTZ`).
+- **Spec-driven server.** [`oapi-codegen`](https://github.com/oapi-codegen/oapi-codegen) generates the chi
+  server interface from [`api/openapi.yaml`](api/openapi.yaml). Run `make generate` after a spec change. Never
+  edit `api/server.gen.go` by hand.
+- **Postgres** through `pgx` and the `database/sql` adapter.
+  [`rubenv/sql-migrate`](https://github.com/rubenv/sql-migrate) runs [`data/migrations`](data/migrations) at
+  startup.
+- **Two Redis instances.** The audit instance is a cache: a user's list expires an hour after its latest event.
+  The sessions instance is persistent, so sessions survive a restart.
+- **No Redis password.** A CiliumNetworkPolicy in offgrid limits each instance to the manager.
 
 ## Configuration
 
-Postgres (manager only):
+Manager only, all optional:
 
-| Env var        | Purpose                                                              |
-| -------------- | ------------------------------------------------------------------- |
-| `PG_PASSWORD`  | Password for the in-cluster DSN (production).                       |
-| `PG_HOST` / `PG_PORT` / `PG_USER` / `PG_DATABASE` | Connection parts (defaulted).    |
-| `PORT`         | HTTP listen port (default `8080`).                                  |
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP listen port |
+| `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_DATABASE` | the in-cluster CNPG Service, `5432`, `app`, `app` | Postgres connection |
+| `PG_PASSWORD` | empty | Postgres password |
+| `REDIS_ADDR`, `REDIS_PASSWORD` | the in-cluster cache Service, empty | audit Redis |
+| `REDIS_SESSIONS_ADDR`, `REDIS_SESSIONS_PASSWORD` | the in-cluster sessions Service, empty | sessions Redis |
 
-### Messaging (all binaries) — **required**, no defaults
+All binaries, required. A missing one fails startup, and the error names every missing variable:
 
-Every messaging variable must be set; a missing one fails startup with an error naming all that are
-missing. Only connection + identity are configured per-pod — the exchange/routing-key names are
-compile-time constants in `internal/messages`, so they can't be misconfigured. Consumers derive their
-own queue name (`<WORKLOAD_NAME>.<exchange>`) to match the topology operator's naming.
+| Env var | Purpose |
+| --- | --- |
+| `WORKLOAD_NAME` | the `service` field of audit messages, and the queue name prefix |
+| `RABBITMQ_HOST`, `RABBITMQ_PORT` | broker address |
+| `RABBITMQ_VHOST` | virtual host |
+| `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD` | credentials, from the Secret the topology operator generates |
 
-| Env var                                   | Purpose                                                    |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `WORKLOAD_NAME`                           | This workload's identity (message `sender`; queue prefix). |
-| `RABBITMQ_HOST` / `RABBITMQ_PORT`         | Broker address.                                            |
-| `RABBITMQ_VHOST`                          | Virtual host.                                              |
-| `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | Credentials (operator-generated Secret in-cluster).        |
+A consumer derives its queue name as `<WORKLOAD_NAME>.<exchange>`, the name the topology chart generates.
 
 ## Develop
 
 ```sh
 make ci          # everything CI runs: tidy, generate, fmt, lint, vet, test, vuln
 make generate    # regenerate the server from the spec
-make build       # build all three binaries (bin/manager, bin/signup, bin/auditor)
-make test        # run tests (spins up a Postgres container via Docker)
+make build       # build bin/manager, bin/signup and bin/auditor
+make test        # run the tests. Needs a running Docker daemon
 make run         # run the manager locally
 make run-signup  # run the signup service locally
 make run-auditor # run the auditor service locally
 ```
 
-Lint runs against the canonical config from [yama6a/gha](https://github.com/yama6a/gha), fetched into
-`.build/` by `make lint-config`. There is no `.golangci.yaml` here.
-
-## Dependency updates
-
-Renovate bumps every pin in the repo: Go modules and the `go` directive (`gomod`), the base images in
-`.build/Dockerfile` (`dockerfile`, digest-pinned), and the action refs in `.github/workflows` (`github-actions`,
-digest-pinned).
-
-- Config: [`renovate.json5`](renovate.json5)
-- Runner: [`.github/workflows/renovate.yaml`](.github/workflows/renovate.yaml), the shared workflow from
-  [yama6a/gha](https://github.com/yama6a/gha), twice a night plus `workflow_dispatch`
-
-One-time setup:
-
-1. Create a PAT. Fine-grained: this repo, Contents + Pull requests + Workflows + Issues read-write. Or classic:
-   `repo` + `workflow`.
-2. Add it as the repo secret `RENOVATE_TOKEN`. The built-in `GITHUB_TOKEN` cannot open PRs that re-trigger
-   workflows and lacks the scope.
-3. Run the workflow by hand. It populates the dependency-dashboard issue and opens the first PRs (one of them
-   pins every action and base image to a digest).
-4. Require the `go / go` and `renovate-config` checks on `main`, no required reviews. Renovate cannot
-   approve its own PR, so a required review deadlocks the automerge.
-
-```bash
-gh api -X PUT repos/yama6a/pi5-k8s-sample-app/branches/main/protection \
-  -H "Accept: application/vnd.github+json" --input - <<'JSON'
-{
-  "required_status_checks": { "strict": false, "checks": [{"context": "go / go"}, {"context": "renovate-config"}] },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null
-}
-JSON
-```
-
-Non-major updates land in one combined PR that Renovate merges itself once CI is green. `platformAutomerge`
-is off, so the merge happens on a LATER run: the first nightly run opens, the second one 30 minutes later
-merges. Majors get their own reviewed PR each, except the testcontainers modules, which stay grouped with the
-core module.
-
-One thing to know: every automerged bump is a push to `main`, so build-push cuts a release, pushes a new
-image tag, and opens an auto-merging PR in `offgrid-private` and `offgrid` that bumps the three charts
-pinning it. Bumps and releases are 1:1.
+`make lint-config` fetches the shared golangci config from [yama6a/gha](https://github.com/yama6a/gha) into
+`.build/`. A `.golangci.local.yaml` in the repo root, if present, is merged on top.
 
 ## Tests
 
-`internal/handler/handler_test.go` gets a migrated Postgres database from
-[pgsandbox](https://github.com/yama6a/pgsandbox), seeds a couple of users, and asserts `GET /users`
-returns them as JSON. The `internal/audit` and `internal/session` tests start Redis through
-[testcontainers-go](https://golang.testcontainers.org/). Both need a running Docker daemon; the
-`pgsandbox-16` container stays up between runs, `docker rm -f pgsandbox-16` removes it.
-`internal/messages` and `internal/mq` carry broker-free unit tests.
+- `internal/handler` clones a migrated Postgres from [pgsandbox](https://github.com/yama6a/pgsandbox). The
+  `pgsandbox-<major>` container stays up between runs. Remove it with `docker rm -f pgsandbox-<major>`.
+- `internal/audit` and `internal/session` start Redis through
+  [testcontainers-go](https://golang.testcontainers.org/).
+- `internal/messages` and `internal/mq` need no broker.
+
+## Dependency updates
+
+Renovate bumps the Go modules, the `go` directive, the base images in `.build/Dockerfile` and the action pins.
+Rules: [`renovate.json5`](renovate.json5). Runner: [`.github/workflows/renovate.yaml`](.github/workflows/renovate.yaml),
+daily. Setup: [Renovate runbook](docs/runbooks/renovate.md).
+
+- Non-major bumps land in one combined PR, which GitHub merges once CI is green.
+- Each major gets its own PR. A Copilot backward-compatibility check turns on auto-merge when it rates the
+  major safe. The testcontainers modules share one major PR, because they must match the core module.
+- Every merge to `main` cuts a release, pushes an image tag, and opens an auto-merging PR in offgrid and
+  offgrid-private that bumps the three charts. So every automerged bump ships.

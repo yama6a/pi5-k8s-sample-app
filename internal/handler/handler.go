@@ -20,8 +20,7 @@ func NewServer(s *store.Store, auditStore *audit.Store, logger *zap.Logger) *Ser
 	return &Server{store: s, audit: auditStore, logger: logger}
 }
 
-// ListUsers implements the generated api.ServerInterface: it returns every persisted user as a
-// JSON array of {id, createdAt}, oldest first. store.User's JSON tags match the OpenAPI schema.
+// ListUsers serves GET /users: every stored user, oldest first.
 func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
@@ -37,9 +36,7 @@ func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListAudit implements the generated api.ServerInterface: it returns every user's audit events currently
-// in Redis as a JSON object keyed by user UUID (each list expires 1h after that user's last activity).
-// messages.AuditLog's JSON tags match the OpenAPI AuditEvent schema.
+// ListAudit serves GET /audit: the audit events of recently active users, keyed by user UUID.
 func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 	events, err := s.audit.ListAll(r.Context())
 	if err != nil {

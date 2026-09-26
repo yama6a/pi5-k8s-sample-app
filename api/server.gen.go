@@ -15,7 +15,7 @@ type ServerInterface interface {
 	// ListAudit List every user's audit events currently cached, keyed by user UUID.
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request)
-	// ListUsers List all persisted users (id + creation timestamp).
+	// ListUsers List every stored user with its creation time.
 	// (GET /users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
 }
@@ -30,7 +30,7 @@ func (_ Unimplemented) ListAudit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListUsers List all persisted users (id + creation timestamp).
+// ListUsers List every stored user with its creation time.
 // (GET /users)
 func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
