@@ -16,14 +16,11 @@ import (
 	"github.com/yama6a/cluster-sampleapp/data"
 )
 
-// DSNFromEnv assembles the Postgres connection string from the PG_* vars,
-// defaulting to the in-cluster sample-workload CloudNativePG read-write Service.
-// The password is escaped via url.URL, so a rotated password with URL-special
-// characters can't malform the DSN.
+// DSNFromEnv builds the Postgres URL from the PG_* variables, defaulting to the in-cluster CNPG Service.
 func DSNFromEnv() string {
 	dsn := url.URL{
 		Scheme: "postgresql",
-		User:   url.UserPassword(getenv("PG_USER", "app"), os.Getenv("PG_PASSWORD")),
+		User:   url.UserPassword(getenv("PG_USER", "app"), os.Getenv("PG_PASSWORD")), // escapes URL-special characters
 		Host: net.JoinHostPort(
 			getenv("PG_HOST", "sample-workload-cluster-rw.sample-workload.svc.cluster.local"),
 			getenv("PG_PORT", "5432"),
@@ -33,7 +30,6 @@ func DSNFromEnv() string {
 	return dsn.String()
 }
 
-// getenv returns the value of key, or fallback when it is unset or empty.
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -74,13 +70,14 @@ func New(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-// User is a persisted user: its id and creation time both originate in the create-user-command.
+// User is a stored user. Its id and creation time come from the create-user-command.
+// Its JSON tags must match the User schema in api/openapi.yaml.
 type User struct {
 	ID        string    `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// CreateUser persists a user with the given id and creation time (both from the command payload).
+// CreateUser inserts a user with the id and creation time the command carried.
 func (s *Store) CreateUser(ctx context.Context, id string, createdAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, "INSERT INTO users (id, created_at) VALUES ($1, $2)", id, createdAt)
 	if err != nil {
@@ -120,8 +117,7 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// DeleteOldestUser deletes the oldest user (by created_at) and returns it. It returns
-// sql.ErrNoRows if the table is empty.
+// DeleteOldestUser deletes and returns the oldest user, or an error wrapping sql.ErrNoRows on an empty table.
 func (s *Store) DeleteOldestUser(ctx context.Context) (User, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx,

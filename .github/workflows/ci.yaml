@@ -3,9 +3,7 @@ name: ci
 on:
   pull_request:
     branches: [main]
-  # A run can only restore caches from its own branch or the DEFAULT branch, and a PR's own
-  # caches are scoped to its merge ref, so without a run on main nothing populates a cache a
-  # fresh PR branch can see and every PR pays the cold-cache cost.
+  # A PR can restore caches only from its own ref or main, so runs on main warm the cache for new PRs.
   push:
     branches: [main]
 

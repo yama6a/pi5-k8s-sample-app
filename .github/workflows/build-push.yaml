@@ -5,7 +5,6 @@ on:
   push:
     branches: [main]
 
-# Don't run two image builds for main at the same time.
 concurrency:
   group: build-push-${{ github.ref }}
   cancel-in-progress: true
@@ -23,12 +22,11 @@ jobs:
     with:
       dockerfile: .build/Dockerfile # the Dockerfile isn't at the repo root
 
-  # Publishing is only half a deploy: the cluster pins an exact tag, so bump it in the GitOps repos and
-  # let ArgoCD sync. One image backs three workloads, so every chart pinning it moves in the same PR.
+  # The GitOps repos pin an exact tag. One PR per repo bumps all three charts that run this image.
   deploy-private:
     needs: build
     uses: yama6a/gha/.github/workflows/deploy-gitops.yaml@v2
-    permissions: {} # nothing from THIS repo is needed; DEPLOY_TOKEN carries the rights
+    permissions: {} # DEPLOY_TOKEN carries the rights
     with:
       tag: ${{ needs.build.outputs.version }}
       values-path: |

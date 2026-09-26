@@ -1,7 +1,4 @@
-// Package audit persists the manager's audit events in Redis: one list per user UUID, each expiring an
-// hour after that user's most recent activity. It mirrors internal/store (the Postgres store) in shape —
-// *FromEnv config with defaulted, escaped env; a NewClient that pings; a Store wrapping the client — so the
-// two backends read the same way. It backs GET /audit. See raspi-cluster docs/12_redis.md.
+// Package audit keeps the manager's audit events in Redis, one list per user, for GET /audit.
 package audit
 
 import (
@@ -18,23 +15,18 @@ import (
 )
 
 const (
-	// keyPrefix namespaces the per-user audit lists (audit:<uuid>).
 	keyPrefix = "audit:"
-	// ttl is how long a user's events live after their most recent activity (refreshed on every write).
-	ttl = time.Hour
+	ttl       = time.Hour // counts from the user's latest event
 )
 
-// OptionsFromEnv builds go-redis options from the REDIS_* vars, defaulting to the in-cluster
-// sample-user-manager cache Service. There is NO password by default: the instance is locked to this
-// workload by a CiliumNetworkPolicy (network-RBAC), not requirepass — see raspi-cluster docs/12_redis.md.
+// OptionsFromEnv reads REDIS_ADDR and REDIS_PASSWORD, defaulting to the in-cluster cache Service.
 func OptionsFromEnv() *redis.Options {
 	return &redis.Options{
 		Addr:     getenv("REDIS_ADDR", "sample-user-manager-cache.sample-user-manager.svc.cluster.local:6379"),
-		Password: os.Getenv("REDIS_PASSWORD"),
+		Password: os.Getenv("REDIS_PASSWORD"), // empty in-cluster: a CiliumNetworkPolicy gates the instance
 	}
 }
 
-// getenv returns the value of key, or fallback when it is unset or empty.
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -61,9 +53,7 @@ func New(rdb *redis.Client) *Store {
 	return &Store{rdb: rdb}
 }
 
-// Record appends an audit event to the per-user list audit:<uuid> and (re)sets its TTL, so a user's
-// events expire an hour after their most recent activity. RPUSH + EXPIRE run in one MULTI so the key can
-// never be left without an expiry.
+// Record appends entry to its user's list and restarts the list's expiry.
 func (s *Store) Record(ctx context.Context, entry messages.AuditLog) error {
 	payload, err := json.Marshal(entry)
 	if err != nil {
@@ -71,7 +61,7 @@ func (s *Store) Record(ctx context.Context, entry messages.AuditLog) error {
 	}
 	key := keyPrefix + entry.UUID
 
-	pipe := s.rdb.TxPipeline()
+	pipe := s.rdb.TxPipeline() // one MULTI, so no list is left without an expiry
 	pipe.RPush(ctx, key, payload)
 	pipe.Expire(ctx, key, ttl)
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -80,9 +70,7 @@ func (s *Store) Record(ctx context.Context, entry messages.AuditLog) error {
 	return nil
 }
 
-// ListAll returns every user's audit events currently in Redis, keyed by user UUID. It SCANs the audit:*
-// keyspace (cheap — the user table is capped at ~10) and LRANGEs each list. Keys expire on their own 1h
-// TTL, so this only ever returns recently-active users.
+// ListAll returns the audit events of every user active within ttl, keyed by user UUID.
 func (s *Store) ListAll(ctx context.Context) (map[string][]messages.AuditLog, error) {
 	out := make(map[string][]messages.AuditLog)
 

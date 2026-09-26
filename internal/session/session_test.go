@@ -16,8 +16,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/session"
 )
 
-// newStore spins up a throwaway Redis container and returns a session.Store plus the raw client (for
-// assertions the Store doesn't expose, e.g. TTL and hash fields). Mirrors internal/audit's helper.
+// newStore also returns the raw client, for assertions the Store does not expose, such as TTLs and hash fields.
 func newStore(t *testing.T) (*session.Store, *redis.Client) {
 	t.Helper()
 

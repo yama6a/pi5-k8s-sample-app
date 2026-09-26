@@ -26,7 +26,7 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
-// Same major as the CNPG cluster in offgrid-private.
+// Keep equal to postgresVersion of the sample_user_manager chart in offgrid.
 const pgMajor = 16
 
 func newStore(t *testing.T) *store.Store {
@@ -89,8 +89,7 @@ func TestListUsers(t *testing.T) {
 	require.NoError(t, st.CreateUser(t.Context(), newer, time.Now()))
 
 	router := chi.NewRouter()
-	// nil audit store: TestListUsers exercises only GET /users, which doesn't touch Redis. The audit
-	// store has its own testcontainer-backed test in internal/audit.
+	// GET /users never touches the audit store, so nil is safe here.
 	api.HandlerFromMux(handler.NewServer(st, nil, zap.NewNop()), router)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
