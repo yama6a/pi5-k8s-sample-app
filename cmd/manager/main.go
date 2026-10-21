@@ -4,17 +4,17 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/redis/go-redis/v9"
+	"github.com/yama6a/gokit/httpserver"
 	"go.uber.org/zap"
 
 	"github.com/yama6a/cluster-sampleapp/api"
@@ -90,8 +90,7 @@ func run(logger *zap.Logger) error {
 		})
 
 	router := chi.NewRouter()
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
+	router.Use(httpserver.Middleware(logger)...)
 	api.HandlerFromMux(handler.NewServer(st, auditStore, logger), router)
 
 	port := os.Getenv("PORT")
@@ -99,25 +98,34 @@ func run(logger *zap.Logger) error {
 		port = "8080"
 	}
 
-	server := &http.Server{
-		Addr:              ":" + port,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	srv := httpserver.New(httpserver.Options{
+		Addr:         ":" + port,
+		Ready:        readyCheck(db, rdb, sdb),
+		API:          router,
+		DrainTimeout: 10 * time.Second,
+		Logger:       logger,
+	})
 
-	go func() {
-		<-ctx.Done()
-		// Detach from the cancelled parent, so in-flight requests get the full grace period.
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
-	}()
-
-	logger.Info("starting server", zap.String("addr", server.Addr))
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	logger.Info("starting server", zap.String("port", port))
+	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
+}
+
+func readyCheck(db *sql.DB, rdb, sdb *redis.Client) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := db.PingContext(ctx); err != nil {
+			return fmt.Errorf("ping database: %w", err)
+		}
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("ping audit redis: %w", err)
+		}
+		if err := sdb.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("ping sessions redis: %w", err)
+		}
+		return nil
+	}
 }
 
 // handleCreateUser returns an error only for mq to log. With autoAck, a failed command is not redelivered.
