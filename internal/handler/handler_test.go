@@ -34,7 +34,7 @@ func newStore(t *testing.T) *store.Store {
 
 	sandbox := pgsandbox.New(t, pgMajor, pgsandbox.Migrate(migrationsKey(t), migrate))
 
-	db, err := store.NewDB(t.Context(), sandbox.DSN)
+	db, err := store.NewDB(t.Context(), sandbox.DSN, zap.NewNop())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -44,7 +44,7 @@ func newStore(t *testing.T) *store.Store {
 // migrate goes through store.Migrate rather than pgsandbox.Migrations, so the sql-migrate
 // bookkeeping table is part of every clone, as it is in production.
 func migrate(ctx context.Context, conn *pgx.Conn) error {
-	db, err := store.NewDB(ctx, conn.Config().ConnString())
+	db, err := store.NewDB(ctx, conn.Config().ConnString(), zap.NewNop())
 	if err != nil {
 		return fmt.Errorf("open blueprint: %w", err)
 	}

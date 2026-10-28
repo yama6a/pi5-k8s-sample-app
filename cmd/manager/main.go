@@ -48,7 +48,7 @@ func run(logger *zap.Logger) error {
 	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	db, err := store.NewDB(connectCtx, store.DSNFromEnv())
+	db, err := store.NewDB(connectCtx, store.DSNFromEnv(), logger)
 	if err != nil {
 		return fmt.Errorf("connect database: %w", err)
 	}

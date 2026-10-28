@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // register the "pgx" database/sql driver
 	migrate "github.com/rubenv/sql-migrate"
+	"github.com/yama6a/gokit/pgretry"
 	"go.uber.org/zap"
 
 	"github.com/yama6a/cluster-sampleapp/data"
@@ -37,8 +37,8 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-func NewDB(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("pgx", dsn)
+func NewDB(ctx context.Context, dsn string, logger *zap.Logger) (*sql.DB, error) {
+	db, err := pgretry.Open(dsn, logger)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
