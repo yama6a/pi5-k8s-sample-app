@@ -27,7 +27,7 @@ import (
 )
 
 // Keep equal to postgresVersion of the sample_user_manager chart in offgrid.
-const pgMajor = 16
+const pgMajor = 18
 
 func newStore(t *testing.T) *store.Store {
 	t.Helper()
