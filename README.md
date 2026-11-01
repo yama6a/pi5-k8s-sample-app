@@ -67,7 +67,7 @@ A consumer derives its queue name as `<WORKLOAD_NAME>.<exchange>`, the name the 
 make ci          # everything CI runs: tidy, generate, fmt, lint, vet, test, vuln
 make generate    # regenerate the server from the spec
 make build       # build bin/manager, bin/signup and bin/auditor
-make test        # run the tests. Needs a running Docker daemon
+make test        # run the tests. The Redis tests need a running Docker daemon
 make run         # run the manager locally
 make run-signup  # run the signup service locally
 make run-auditor # run the auditor service locally
@@ -78,8 +78,9 @@ make run-auditor # run the auditor service locally
 
 ## Tests
 
-- `internal/handler` clones a migrated Postgres from [pgsandbox](https://github.com/yama6a/pgsandbox). The
-  `pgsandbox-<major>` container stays up between runs. Remove it with `docker rm -f pgsandbox-<major>`.
+- `internal/handler` clones a migrated Postgres from [pgsandbox](https://github.com/yama6a/pgsandbox). With
+  `PGSANDBOX_DSN` set, it uses that server, as in claudetainer. Without it, pgsandbox starts a
+  `pgsandbox-<major>` container, which stays up between runs. Remove it with `docker rm -f pgsandbox-<major>`.
 - `internal/audit` and `internal/session` start Redis through
   [testcontainers-go](https://golang.testcontainers.org/).
 - `internal/messages` and `internal/mq` need no broker.
