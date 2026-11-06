@@ -12,9 +12,9 @@ require (
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/stretchr/testify v1.12.1
-	github.com/testcontainers/testcontainers-go v0.44.0
-	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
-	github.com/yama6a/gokit v0.4.0
+	github.com/testcontainers/testcontainers-go v0.45.0
+	github.com/testcontainers/testcontainers-go/modules/redis v0.45.0
+	github.com/yama6a/gokit v0.6.0
 	github.com/yama6a/pgsandbox v0.4.2
 	go.uber.org/zap v1.28.0
 )
