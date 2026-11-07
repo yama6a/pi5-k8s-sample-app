@@ -210,8 +210,8 @@ github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqo
 github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
 github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=
 github.com/vmware-labs/yaml-jsonpath v0.3.2/go.mod h1:U6whw1z03QyqgWdgXxvVnQ90zN1BWz5V+51Ewf8k+rQ=
-github.com/yama6a/gokit v0.6.0 h1:ySv8D9kyFEeCHtdmPFXJggl1inQjdXfA9YmfowY2JBE=
-github.com/yama6a/gokit v0.6.0/go.mod h1:tSps9iJJoWCY5vPW7SdWNtBf2M44HhXGg6d1tzvOukI=
+github.com/yama6a/gokit v1.0.0 h1:uuUpF6z220+MDEcPkKYtw2kyB02U7bLQPYTco9xRUME=
+github.com/yama6a/gokit v1.0.0/go.mod h1:tSps9iJJoWCY5vPW7SdWNtBf2M44HhXGg6d1tzvOukI=
 github.com/yama6a/pgsandbox v0.4.2 h1:2HMYYq3vDjv+IWlpEhzyGtOKuM8hK0HSMoucuehpYos=
 github.com/yama6a/pgsandbox v0.4.2/go.mod h1:iUR/u2RtNB5twH6+XN1g7wDXcDLDgjenPfN0xIq/qQQ=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
