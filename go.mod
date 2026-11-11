@@ -1,6 +1,6 @@
 module github.com/yama6a/cluster-sampleapp
 
-go 1.27.3
+go 1.27.4
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
@@ -14,8 +14,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.45.0
-	github.com/yama6a/gokit v1.0.2
-	github.com/yama6a/pgsandbox v0.4.3
+	github.com/yama6a/gokit v1.0.3
+	github.com/yama6a/pgsandbox v0.4.4
 	go.uber.org/zap v1.28.0
 )
 
