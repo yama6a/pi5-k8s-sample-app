@@ -14,8 +14,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.45.0
-	github.com/yama6a/gokit v1.0.4
-	github.com/yama6a/pgsandbox v0.4.5
+	github.com/yama6a/gokit v1.0.5
+	github.com/yama6a/pgsandbox v0.4.6
 	go.uber.org/zap v1.28.0
 )
 
@@ -48,7 +48,7 @@ require (
 	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/lufia/plan9stats v0.0.0-20261101121723-be84dd9509a0 // indirect
-	github.com/magiconair/properties v1.18.12 // indirect
+	github.com/magiconair/properties v1.18.13 // indirect
 	github.com/mdelapenya/tlscert v0.2.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.3.3 // indirect
