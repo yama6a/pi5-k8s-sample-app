@@ -26,8 +26,9 @@ import (
 	"github.com/yama6a/cluster-sampleapp/internal/store"
 )
 
-// Keep equal to postgresVersion of the sample_user_manager chart in offgrid.
-const pgMajor = 18
+// Follows the Docker Hub postgres image, so it may run one major ahead of the
+// chart's postgresVersion, which waits for CloudNativePG.
+const pgMajor = 19
 
 func newStore(t *testing.T) *store.Store {
 	t.Helper()
