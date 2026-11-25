@@ -9,12 +9,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/rabbitmq/amqp091-go v1.17.0
-	github.com/redis/go-redis/v9 v9.23.0
+	github.com/redis/go-redis/v9 v9.24.0
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.45.0
-	github.com/yama6a/gokit v1.3.0
+	github.com/yama6a/gokit v1.3.1
 	github.com/yama6a/pgsandbox v0.4.8
 	go.uber.org/zap v1.28.0
 )
@@ -55,7 +55,7 @@ require (
 	github.com/moby/moby/client v0.6.3 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
-	github.com/moby/sys/user v0.5.0 // indirect
+	github.com/moby/sys/user v0.5.1 // indirect
 	github.com/moby/sys/userns v0.2.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.9.0 // indirect
