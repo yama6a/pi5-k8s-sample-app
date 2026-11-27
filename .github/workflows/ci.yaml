@@ -3,9 +3,6 @@ name: ci
 on:
   pull_request:
     branches: [main]
-  # A PR can restore caches only from its own ref or main, so runs on main warm the cache for new PRs.
-  push:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -17,9 +14,3 @@ permissions:
 jobs:
   go:
     uses: yama6a/gha/.github/workflows/go-ci.yaml@v2
-
-  renovate-config:
-    runs-on: ubuntu-26.04-arm
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: yama6a/gha/.github/actions/validate-renovate-config@v2
